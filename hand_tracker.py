@@ -217,19 +217,28 @@ class HandTrackerApp:
             
             hands_data = []
             if results.multi_hand_landmarks:
-                # Calculate Spread and Gesture for HUD
-                h1_lms = results.multi_hand_landmarks[0].landmark
-                dist_8_20 = self.get_dist(h1_lms[8], h1_lms[20])
-                spread_pct = min(int(dist_8_20 * 300), 100)
-                gesture = "None"
-                if not any(self.last_pinch):
-                    gesture = "Open Hand" if spread_pct > 50 else "Fist"
+                total_fingers_up = 0
+                is_any_pinching = False
                 
                 for idx, hand_lms in enumerate(results.multi_hand_landmarks):
-                    hands_data.append(hand_lms.landmark)
+                    lms = hand_lms.landmark
+                    fingers_up = 0
+                    
+                    # Thumb
+                    if self.get_dist(lms[4], lms[17]) > self.get_dist(lms[3], lms[17]):
+                        fingers_up += 1
+                    # Index to Pinky
+                    tips = [8, 12, 16, 20]
+                    pips = [6, 10, 14, 18]
+                    for tip, pip in zip(tips, pips):
+                        if self.get_dist(lms[tip], lms[0]) > self.get_dist(lms[pip], lms[0]):
+                            fingers_up += 1
+                    
+                    total_fingers_up += fingers_up
+                    hands_data.append(lms)
                     
                     if self.prev_landmarks and idx < len(self.prev_landmarks):
-                        d = self.get_dist(hand_lms.landmark[8], self.prev_landmarks[idx][8])
+                        d = self.get_dist(lms[8], self.prev_landmarks[idx][8])
                         self.hand_vel = d
                     
                     h_color = get_theme_color(self.current_theme, curr_time, idx, 2)
@@ -241,7 +250,7 @@ class HandTrackerApp:
                     )
                     
                     for f_idx, tip in enumerate(FINGER_TIPS):
-                        pt = hand_lms.landmark[tip]
+                        pt = lms[tip]
                         px, py = int(pt.x * w), int(pt.y * h)
                         tip_color = get_theme_color(self.current_theme, curr_time, f_idx, 5)
                         
@@ -249,17 +258,30 @@ class HandTrackerApp:
                         if random.random() > 0.6:
                             self.particles.append(Particle(px, py, tip_color))
 
-                    thumb = hand_lms.landmark[4]
-                    index = hand_lms.landmark[8]
+                    thumb = lms[4]
+                    index = lms[8]
                     dist = self.get_dist(thumb, index)
                     is_pinching = dist < 0.05
                     
-                    if is_pinching and not self.last_pinch[idx]:
-                        mx, my = int((thumb.x + index.x)/2 * w), int((thumb.y + index.y)/2 * h)
-                        self.ripples.append(Ripple(mx, my, h_color))
-                        self.audio.trigger_zap()
-                        gesture = "PINCH !"
+                    if is_pinching:
+                        is_any_pinching = True
+                        if not self.last_pinch[idx]:
+                            mx, my = int((thumb.x + index.x)/2 * w), int((thumb.y + index.y)/2 * h)
+                            self.ripples.append(Ripple(mx, my, h_color))
+                            self.audio.trigger_zap()
                     self.last_pinch[idx] = is_pinching
+                
+                num_hands = len(results.multi_hand_landmarks)
+                spread_pct = int((total_fingers_up / (num_hands * 5)) * 100)
+                
+                if is_any_pinching:
+                    gesture = "Pinch"
+                elif total_fingers_up == 0:
+                    gesture = "Fist"
+                elif total_fingers_up == num_hands * 5:
+                    gesture = "Open Hand"
+                else:
+                    gesture = f"{total_fingers_up} Fingers"
                 
                 self.prev_landmarks = [h.landmark for h in results.multi_hand_landmarks]
                 
