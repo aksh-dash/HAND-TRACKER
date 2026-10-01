@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced Hand Tracking AR</title>
     
-    <!-- MediaPipe Hands CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -18,158 +17,94 @@
             --glass-bg: rgba(20, 25, 40, 0.4);
             --glass-border: rgba(255, 255, 255, 0.15);
             --glass-blur: blur(16px);
-            --accent: #00ffcc;
+            --accent: #ffffff;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Inter', sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             overflow: hidden;
         }
 
-        .video-container {
-            position: absolute;
-            width: 100vw;
-            height: 100vh;
+        .zoom-layer {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            will-change: transform; transform-origin: center center;
+            /* NO transition for zoom lag removal */
         }
 
         .input_video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1); /* Mirror */
-            z-index: 0; /* Let the raw camera sit behind */
-            filter: brightness(0.6) contrast(1.1); /* Subtle dark to make neon pop */
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; transform: scaleX(-1); z-index: 0;
+            filter: brightness(0.6) contrast(1.1);
         }
 
-        /* 
-         * Background Canvas captures the video frame and applies the matrix rain/starfield 
-         */
         #bgCanvas, #mainCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1); /* Mirror */
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; transform: scaleX(-1);
         }
-        
-        #bgCanvas {
-            z-index: 1;
-            pointer-events: none;
-        }
+        #bgCanvas { z-index: 1; pointer-events: none; }
+        #mainCanvas { z-index: 5; pointer-events: none; }
 
-        #mainCanvas {
-            z-index: 5;
-            pointer-events: none;
-            /* We use mix-blend-mode for the glowing effects in canvas */
-        }
-
-        /* UI Overlays */
         #hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            pointer-events: none;
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            display: flex; flex-direction: column; gap: 15px; pointer-events: none;
         }
 
         .panel {
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur);
-            -webkit-backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--glass-border);
-            border-radius: 12px;
-            padding: 15px 20px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            background: var(--glass-bg); backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border); border-radius: 12px;
+            padding: 15px 20px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            display: flex; flex-direction: column; gap: 8px; pointer-events: auto;
         }
 
         .stat {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.8);
-            min-width: 180px;
+            display: flex; justify-content: space-between; font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8); min-width: 200px; align-items: center;
         }
-        .stat:last-child { margin-bottom: 0; }
         .stat span.val { font-weight: bold; color: var(--accent); }
 
-        /* Themes */
-        #themes {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            display: flex;
-            gap: 10px;
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--glass-border);
-            border-radius: 30px;
-            padding: 8px;
-            transition: opacity 0.5s;
+        .timer-ring {
+            width: 20px; height: 20px; border-radius: 50%;
+            background: conic-gradient(var(--accent) 0%, transparent 0%);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            display: inline-block;
+        }
+
+        .pinch-bar {
+            position: relative; height: 10px; background: rgba(0,0,0,0.5); 
+            border-radius: 5px; overflow: hidden; margin-top: 4px; border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #modes-bar {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 10; display: flex; gap: 10px;
+            background: var(--glass-bg); backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border); border-radius: 30px; padding: 8px;
         }
 
         .theme-btn {
-            background: transparent;
-            border: 1px solid transparent;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: 0.3s ease;
-            font-weight: 500;
+            background: transparent; border: 1px solid transparent; color: white;
+            padding: 8px 16px; border-radius: 20px; cursor: pointer;
+            transition: 0.3s ease; font-weight: 500;
         }
-        
         .theme-btn.active {
-            background: rgba(255,255,255,0.15);
-            border-color: rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3);
             text-shadow: 0 0 10px white;
         }
 
-        /* Start Overlay */
         #startOverlay {
-            position: absolute;
-            inset: 0;
-            background: rgba(0,0,0,0.85);
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(10px);
-            transition: opacity 0.5s ease;
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85); z-index: 100;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            backdrop-filter: blur(10px); transition: opacity 0.5s ease;
         }
 
         .start-btn {
-            padding: 16px 40px;
-            font-size: 1.2rem;
-            background: linear-gradient(45deg, #ff00cc, #3333ff);
-            border: none;
-            color: white;
-            border-radius: 30px;
-            cursor: pointer;
-            box-shadow: 0 0 20px rgba(255, 0, 204, 0.5);
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            transition: transform 0.2s;
+            padding: 16px 40px; font-size: 1.2rem; background: linear-gradient(45deg, #ffffff, #aaaaaa);
+            color: black; border: none; border-radius: 30px; cursor: pointer;
+            font-weight: bold; text-transform: uppercase; letter-spacing: 2px; transition: transform 0.2s;
         }
         .start-btn:hover { transform: scale(1.05); }
 
@@ -178,448 +113,50 @@
 </head>
 <body>
 
-    <!-- Start Overlay (Required for AudioContext initialization) -->
     <div id="startOverlay">
         <h1 style="margin-bottom: 20px; font-weight: 300; letter-spacing: 4px;">NEON AURA AR</h1>
-        <p style="margin-bottom: 40px; color: #888;">Grant camera permissions and click to start audio/visual experience</p>
+        <p style="margin-bottom: 40px; color: #888;">Grant camera permissions and click to start experience</p>
         <button class="start-btn" id="startBtn">Enter Experience</button>
     </div>
 
-    <div class="video-container">
+    <div class="zoom-layer" id="zoom-container">
         <video class="input_video" autoplay playsinline></video>
         <canvas id="bgCanvas"></canvas>
         <canvas id="mainCanvas"></canvas>
     </div>
 
-    <!-- UI Overlay -->
     <div id="hud" class="hidden">
         <div class="panel">
+            <div class="stat">Mode: <span class="val" id="ui-mode">Detect</span></div>
             <div class="stat">Hands Detected: <span class="val" id="ui-hands">0</span></div>
-            <div class="stat">FPS: <span class="val" id="ui-fps">0</span></div>
+            <div class="stat">Render FPS: <span class="val" id="ui-fps">0</span></div>
+            <div class="stat">Detect FPS: <span class="val" id="ui-detect-fps">0</span></div>
+            <div class="stat">Latency: <span class="val" id="ui-latency">0 ms</span></div>
+            <div class="stat">Bridge: <span class="val" id="ui-bridge" style="color:red;">Disconnected</span></div>
         </div>
         <div class="panel">
             <div class="stat">Gesture: <span class="val" id="ui-gesture">None</span></div>
-            <div class="stat">Spread: <span class="val" id="ui-spread">0%</span></div>
+            <div class="stat">Confidence: <span class="val" id="ui-confidence">0%</span></div>
+            <div class="stat">Hold Timer: <div class="timer-ring" id="ui-timer-ring"></div></div>
+            <div style="margin-top: 8px; font-size: 0.8rem; color: #aaa;">Pinch Meter: <span id="ui-pinch-text" style="color:white; font-weight:bold; margin-left:5px;">OPEN</span></div>
+            <div class="pinch-bar">
+                <div id="ui-pinch-fill" style="height: 100%; width: 0%; background: #00ffcc; transition: width 0.05s;"></div>
+                <div id="ui-pinch-enter" style="position: absolute; top:0; bottom:0; width:2px; background: lime; left: 30%;"></div>
+                <div id="ui-pinch-exit" style="position: absolute; top:0; bottom:0; width:2px; background: red; left: 45%;"></div>
+            </div>
+            <div class="stat" id="ui-zoom-info" style="display:none; margin-top:8px;">Zoom: <span class="val" id="ui-zoom-val">1.0x</span></div>
+        </div>
+        <div class="panel">
+            <label style="font-size:0.9rem; cursor:pointer;"><input type="checkbox" id="ui-show-skeleton" checked> Show Skeleton Overlay</label>
+            <label style="font-size:0.9rem; cursor:pointer; margin-top:5px; display:block;"><input type="checkbox" id="ui-debug"> Debug Crosshair</label>
         </div>
     </div>
 
-    <div id="themes" class="hidden">
-        <button class="theme-btn active" data-theme="Monochrome">Monochrome</button>
-        <button class="theme-btn" data-theme="Subtle Blue">Subtle Blue</button>
+    <div id="modes-bar" class="hidden">
+        <!-- Modes injected dynamically by JS -->
     </div>
 
-<script>
-/** 
- * GLOBALS & CONFIG
- */
-const videoElement = document.querySelector('.input_video');
-const bgCanvas = document.getElementById('bgCanvas');
-const mainCanvas = document.getElementById('mainCanvas');
-const bgCtx = bgCanvas.getContext('2d');
-const ctx = mainCanvas.getContext('2d');
-
-let width = window.innerWidth;
-let height = window.innerHeight;
-
-let time = 0;
-let lastTime = performance.now();
-let framesThisSecond = 0;
-let lastFpsTime = performance.now();
-
-let currentHands = []; // Latest data from MediaPipe
-let handVelocities = 0; // Average hand movement speed
-
-// Theme Config
-let currentTheme = 'Monochrome';
-const themes = {
-    'Monochrome':   (t, index, total) => `rgba(255, 255, 255, 0.6)`,
-    'Subtle Blue':  (t, index, total) => `rgba(180, 220, 255, 0.6)`
-};
-
-// Physics Engines Data
-let particles = [];
-let ripples = [];
-const FINGER_TIPS = [4, 8, 12, 16, 20];
-
-// Matrix Background
-let matrixColumns = [];
-const fontSize = 16;
-let maxColumns = 0;
-
-// Audio Node References
-let audioCtx = null;
-let humOsc = null;
-let humGain = null;
-
-// UI Elements
-const uiHands = document.getElementById('ui-hands');
-const uiFps = document.getElementById('ui-fps');
-const uiGesture = document.getElementById('ui-gesture');
-const uiSpread = document.getElementById('ui-spread');
-
-/**
- * INITIALIZATION
- */
-function resize() {
-    width = window.innerWidth;
-    height = window.innerHeight;
-    bgCanvas.width = width;
-    bgCanvas.height = height;
-    mainCanvas.width = width;
-    mainCanvas.height = height;
-    
-    maxColumns = Math.floor(width / fontSize);
-    matrixColumns = new Array(maxColumns).fill(1).map(() => Math.random() * height/fontSize);
-}
-window.addEventListener('resize', resize);
-resize();
-
-// UI Theme Switcher
-document.querySelectorAll('.theme-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        currentTheme = e.target.getAttribute('data-theme');
-        document.documentElement.style.setProperty('--accent', themes[currentTheme](0, 1, 1));
-    });
-});
-
-// Start button triggers AudioContext and hides overlay
-document.getElementById('startBtn').addEventListener('click', () => {
-    document.getElementById('startOverlay').classList.add('hidden');
-    document.getElementById('hud').classList.remove('hidden');
-    document.getElementById('themes').classList.remove('hidden');
-    initAudio();
-    initMediaPipe();
-    requestAnimationFrame(renderLoop);
-});
-
-
-/**
- * AUDIO ENGINE
- */
-function initAudio() {
-    try {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Continuous Hum
-        humOsc = audioCtx.createOscillator();
-        humGain = audioCtx.createGain();
-        
-        humOsc.type = 'sine';
-        humOsc.frequency.value = 100;
-        
-        humGain.gain.value = 0; // Mute until hands are seen
-        
-        humOsc.connect(humGain);
-        humGain.connect(audioCtx.destination);
-        humOsc.start();
-    } catch(e) {
-        console.error("Web Audio API failed", e);
-    }
-}
-
-function triggerZap() {
-    if (!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    
-    // Zap sound profile
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
-    
-    gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-    
-    osc.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.15);
-}
-
-function updateHum(activeHands) {
-    if (!audioCtx || !humGain) return;
-    if (activeHands.length < 2) {
-        humGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
-        return;
-    }
-
-    // Measure distance between index fingers to modulate volume
-    const p1 = activeHands[0][8];
-    const p2 = activeHands[1][8];
-    const dx = p1.x - p2.x;
-    const dy = p1.y - p2.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    
-    // The closer they are, the higher the pitch and volume
-    const targetFreq = 100 + (1 - Math.min(dist, 1)) * 300;
-    const targetVolume = 0.05 + (1 - Math.min(dist, 1)) * 0.15;
-    
-    humOsc.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.1);
-    humGain.gain.setTargetAtTime(targetVolume, audioCtx.currentTime, 0.1);
-}
-
-/**
- * MATH & STATE LOGIC
- */
-function getDist(p1, p2) {
-    return Math.hypot(p1.x - p2.x, p1.y - p2.y);
-}
-
-// Convert normalized landmark to specific canvas scale (Note: canvas is horizontally flipped)
-function mapToCanvas(point) {
-    return { x: point.x * width, y: point.y * height };
-}
-
-let lastPinchState = [false, false]; // Prevents rapid re-triggering
-
-function detectGestures() {
-    if (!currentHands.length) return;
-    
-    let totalFingersUp = 0;
-    let isAnyPinching = false;
-    
-    currentHands.forEach((hand, idx) => {
-        let fingersUp = 0;
-        
-        // Thumb
-        if (getDist(hand[4], hand[17]) > getDist(hand[3], hand[17])) {
-            fingersUp++;
-        }
-        // Index to Pinky
-        const tips = [8, 12, 16, 20];
-        const pips = [6, 10, 14, 18];
-        for (let i = 0; i < 4; i++) {
-            if (getDist(hand[tips[i]], hand[0]) > getDist(hand[pips[i]], hand[0])) {
-                fingersUp++;
-            }
-        }
-        totalFingersUp += fingersUp;
-        
-        // Pinch Detection: Thumb (4) and Index (8)
-        const thumb = hand[4];
-        const index = hand[8];
-        const dist = getDist(thumb, index);
-        
-        const isPinching = dist < 0.05; // 5% of screen screen distance
-        
-        if (isPinching) {
-            isAnyPinching = true;
-            if (!lastPinchState[idx]) {
-                triggerZap();
-            }
-        }
-        lastPinchState[idx] = isPinching;
-    });
-
-    const numHands = currentHands.length;
-    let spreadPct = Math.min(Math.round((totalFingersUp / (numHands * 5)) * 100), 100);
-    uiSpread.innerText = spreadPct + '%';
-    
-    if (isAnyPinching) {
-        uiGesture.innerText = "PINCH !";
-    } else if (totalFingersUp === 0) {
-        uiGesture.innerText = "Fist";
-    } else if (totalFingersUp === numHands * 5) {
-        uiGesture.innerText = "Open Hand";
-    } else {
-        uiGesture.innerText = totalFingersUp + " Fingers";
-    }
-}
-
-/**
- * EFFECTS & PHYSICS
- */
-function createParticles(pos, color, count = 3) {
-    for (let i=0; i<count; i++) {
-        particles.push({
-            x: pos.x,
-            y: pos.y,
-            vx: (Math.random() - 0.5) * 8,
-            vy: (Math.random() - 0.5) * 8,
-            life: 1.0,
-            color: color,
-            size: Math.random() * 3 + 1
-        });
-    }
-}
-
-function createShockwave(pos, color) {
-    ripples.push({
-        x: pos.x,
-        y: pos.y,
-        radius: 0,
-        maxRadius: 150 + Math.random() * 100,
-        life: 1.0,
-        color: color
-    });
-}
-
-// Background Effect Engine
-function drawBackground() {
-    // Minimalistic transparent trail without matrix rain
-    bgCtx.globalCompositeOperation = 'destination-out';
-    bgCtx.fillStyle = `rgba(0, 0, 0, 0.1)`;
-    bgCtx.fillRect(0, 0, width, height);
-    bgCtx.globalCompositeOperation = 'source-over';
-}
-
-function updatePhysics() {
-    // Particles
-    for (let i = particles.length - 1; i >= 0; i--) {
-        let p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.02;     // Fade out
-        p.vy += 0.1;        // Gravity
-        
-        if (p.life <= 0) {
-            particles.splice(i, 1);
-        } else {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life;
-            ctx.fill();
-        }
-    }
-    
-    // Ripples / Shockwaves
-    for (let i = ripples.length - 1; i >= 0; i--) {
-        let r = ripples[i];
-        r.radius += (r.maxRadius - r.radius) * 0.1; // Ease out
-        r.life -= 0.03;
-        
-        if (r.life <= 0) {
-            ripples.splice(i, 1);
-        } else {
-            ctx.beginPath();
-            ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-            ctx.strokeStyle = r.color;
-            ctx.lineWidth = 4 * r.life;
-            ctx.globalAlpha = r.life;
-            ctx.stroke();
-        }
-    }
-    ctx.globalAlpha = 1.0; // Reset
-}
-
-/**
- * MAIN RENDER PIPELINE
- */
-function renderLoop(timestamp) {
-    requestAnimationFrame(renderLoop);
-    
-    let dt = (timestamp - lastTime) / 1000;
-    lastTime = timestamp;
-    time += dt;
-
-    // Update FPS Counter
-    framesThisSecond++;
-    if (timestamp > lastFpsTime + 1000) {
-        uiFps.innerText = framesThisSecond;
-        framesThisSecond = 0;
-        lastFpsTime = timestamp;
-    }
-
-    drawBackground();
-
-    // The main canvas will clear fully each frame since we handle ghosting via bgCanvas 
-    // BUT user requested trailing motion blur for fingertips.
-    // Instead of clearRect, we fade the main canvas using destination-out to keep it transparent
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-    ctx.fillRect(0, 0, width, height);
-
-    // Enable Screen mode for additive light effects (like neon bloom)
-    ctx.globalCompositeOperation = 'screen'; // Creates glowy overlapping effects
-
-    // Render Physics layer
-    updatePhysics();
-
-    // Process Hand Logic if present
-    if (currentHands.length > 0) {
-        
-        // 1. Draw Skeleton
-        currentHands.forEach((hand, handIndex) => {
-            const themeColor = themes[currentTheme] ? themes[currentTheme](time, handIndex, 2) : 'rgba(255, 255, 255, 0.7)';
-            
-            // Draw MediaPipe skeleton connectors using custom styles
-            drawConnectors(ctx, hand, HAND_CONNECTIONS, {
-                color: themeColor,
-                lineWidth: 1.5
-            });
-            
-            // Draw Landmarks minimalistic
-            FINGER_TIPS.forEach((tipIndex, idx) => {
-                const pt = mapToCanvas(hand[tipIndex]);
-                
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
-                ctx.fillStyle = themeColor;
-                ctx.fill();
-            });
-        });
-
-        detectGestures();
-    }
-    
-    ctx.globalCompositeOperation = 'source-over'; // Restore
-}
-
-/**
- * MEDIAPIPE INITIALIZATION
- */
-function initMediaPipe() {
-    const hands = new Hands({locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-    }});
-
-    hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1, 
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.7
-    });
-
-    hands.onResults((results) => {
-        if (!audioCtx) return; // Wait for initialization
-
-        // Update global state for render loop to read from
-        uiHands.innerText = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
-        
-        // Calculate velocity (rudimentary)
-        if (currentHands.length > 0 && results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            let vSum = 0;
-            // check distance difference on index finger of hand 0 
-            const oldP = currentHands[0][8];
-            const newP = results.multiHandLandmarks[0][8];
-            if (oldP && newP) {
-                vSum += getDist(oldP, newP);
-                handVelocities = vSum; 
-            }
-        } else {
-            handVelocities = 0;
-        }
-
-        currentHands = results.multiHandLandmarks || [];
-        updateHum(currentHands);
-    });
-
-    const camera = new Camera(videoElement, {
-        onFrame: async () => {
-            await hands.send({image: videoElement});
-        },
-        width: 1280,
-        height: 720,
-        facingMode: 'user'
-    });
-    
-    camera.start();
-}
-
-</script>
+    <!-- Main Module -->
+    <script type="module" src="./js/main.js"></script>
 </body>
 </html>
